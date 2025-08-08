@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>To-Do List con Login Responsive</title>
   <style>
-    /* Stessi stili identici al tuo originale */
     :root {
       --colors: #FDE68A, #A7F3D0, #BFDBFE, #FECACA, #D9D7FE;
       --background: #F3F4F6;
@@ -315,155 +314,180 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-app.js";
     import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-auth.js";
-    import { getFirestore, collection, doc, setDoc, getDocs, onSnapshot, deleteDoc } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-firestore.js";
+    import { getFirestore, collection, doc, setDoc, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-firestore.js";
 
+    // Config Firebase
     const firebaseConfig = {
-      apiKey: "YOUR_API_KEY",
-      authDomain: "YOUR_AUTH_DOMAIN",
-      projectId: "YOUR_PROJECT_ID",
-      storageBucket: "YOUR_STORAGE_BUCKET",
-      messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-      appId: "YOUR_APP_ID"
+      apiKey: "AIzaSyAOPSQKmSES4Aa4wf7wRCTNepBEpe7PqEw",
+      authDomain: "todo-sync-8d791.firebaseapp.com",
+      projectId: "todo-sync-8d791",
+      storageBucket: "todo-sync-8d791.appspot.com",
+      messagingSenderId: "699733252639",
+      appId: "1:699733252639:web:99276535a646e79b52532a"
     };
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
 
-    const loginScreen = document.getElementById("login-screen");
-    const container = document.querySelector(".container");
-    const loginForm = document.getElementById("login-form");
-    const loginError = document.getElementById("login-error");
-    const tasksList = document.getElementById("tasks");
-    const newTaskInput = document.getElementById("new-task-input");
-    const addTaskBtn = document.getElementById("add-task-btn");
+    // DOM Elements
+    const loginScreen = document.getElementById('login-screen');
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const loginBtn = document.getElementById('login-btn');
+    const loginError = document.getElementById('login-error');
 
+    const container = document.querySelector('.container');
+    const taskInput = document.getElementById('task-input');
+    const addBtn = document.getElementById('add-btn');
+    const tasksUL = document.getElementById('tasks');
+
+    let tasks = [];
+    let unsubscribeTasksListener = null;
     let currentUser = null;
 
-    loginForm.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      loginError.textContent = "";
-      const email = loginForm.email.value.trim();
-      const password = loginForm.password.value;
-      if (!email || !password) {
-        loginError.textContent = "Inserisci email e password.";
-        return;
-      }
-      try {
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        currentUser = userCredential.user;
-        loginScreen.style.display = "none";
-        container.style.display = "flex";
-        loadTasksRealtime();
-      } catch (error) {
-        loginError.textContent = "Email o password errati.";
-      }
-    });
-
-    function renderTask(docSnap) {
-      const taskData = docSnap.data();
-      const li = document.createElement("li");
-      li.classList.add("task");
-      if (taskData.completed) li.classList.add("completed");
-      li.dataset.id = docSnap.id;
-      li.innerHTML = `
-        <div class="title">${taskData.title}</div>
-        <div class="actions">
-          <button class="complete-btn" title="Completa"><span>✔️</span></button>
-          <button class="delete-btn" title="Elimina"><span>🗑️</span></button>
-        </div>
-      `;
-      const completeBtn = li.querySelector(".complete-btn");
-      completeBtn.onclick = () => toggleComplete(docSnap.id, !taskData.completed);
-      const deleteBtn = li.querySelector(".delete-btn");
-      deleteBtn.onclick = () => deleteTask(docSnap.id);
-      return li;
+    function showError(msg) {
+      loginError.textContent = msg;
     }
 
-    function toggleComplete(taskId, completed) {
+    function render() {
+      tasksUL.innerHTML = '';
+      tasks.forEach((task, idx) => {
+        const li = document.createElement('li');
+        li.className = `task${task.done ? ' completed' : ''}`;
+        const colors = getComputedStyle(document.documentElement)
+          .getPropertyValue('--colors').split(',');
+        const color = colors[idx % colors.length].trim();
+
+        li.style.backgroundColor = color;
+
+        const title = document.createElement('div');
+        title.className = 'title';
+        title.textContent = task.title;
+        li.appendChild(title);
+
+        const actions = document.createElement('div');
+        actions.className = 'actions';
+
+        const completeBtn = document.createElement('button');
+        completeBtn.innerHTML = task.done ? '↩️' : '✓';
+        completeBtn.title = task.done ? 'Segna come da fare' : 'Segna come fatto';
+        completeBtn.className = 'complete-btn';
+        completeBtn.addEventListener('click', () => toggleDone(task.id));
+        actions.appendChild(completeBtn);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.textContent = '🗑️';
+        deleteBtn.title = 'Elimina task';
+        deleteBtn.className = 'delete-btn';
+        deleteBtn.addEventListener('click', () => deleteTask(task.id));
+        actions.appendChild(deleteBtn);
+
+        li.appendChild(actions);
+
+        tasksUL.appendChild(li);
+      });
+    }
+
+    // Firestore
+    async function addTask(title) {
       if (!currentUser) return;
-      const taskDocRef = doc(db, "users", currentUser.uid, "tasks", taskId);
-      setDoc(taskDocRef, { completed }, { merge: true });
+      const taskRef = doc(collection(db, 'users', currentUser.uid, 'tasks'));
+      await setDoc(taskRef, { title, done: false });
+    }
+
+    async function toggleDone(taskId) {
+      if (!currentUser) return;
+      const taskRef = doc(db, 'users', currentUser.uid, 'tasks', taskId);
+      const task = tasks.find(t => t.id === taskId);
+      if (!task) return;
+      await setDoc(taskRef, { title: task.title, done: !task.done });
     }
 
     async function deleteTask(taskId) {
       if (!currentUser) return;
-      const taskRef = doc(db, "users", currentUser.uid, "tasks", taskId);
-      await deleteDoc(taskRef);
+      const taskRef = doc(db, 'users', currentUser.uid, 'tasks', taskId);
+      await taskRef.delete();
     }
 
-    async function addTask(title) {
-      if (!currentUser) return;
-      const tasksCollectionRef = collection(db, "users", currentUser.uid, "tasks");
-      const newTaskRef = doc(tasksCollectionRef); // genera id automaticamente
-      await setDoc(newTaskRef, {
-        title: title,
-        completed: false,
-        createdAt: new Date()
-      });
-    }
-
-    addTaskBtn.addEventListener("click", async () => {
-      const title = newTaskInput.value.trim();
-      if (!title) return;
-      await addTask(title);
-      newTaskInput.value = "";
-    });
-
-    // Invio con Enter
-    newTaskInput.addEventListener("keypress", (e) => {
-      if (e.key === "Enter") addTaskBtn.click();
-    });
-
-    let unsubscribeTasks = null;
-
-    function loadTasksRealtime() {
-      if (!currentUser) return;
-      if (unsubscribeTasks) unsubscribeTasks();
-      const tasksCollectionRef = collection(db, "users", currentUser.uid, "tasks");
-      unsubscribeTasks = onSnapshot(tasksCollectionRef, (snapshot) => {
-        tasksList.innerHTML = "";
-        snapshot.forEach((docSnap) => {
-          tasksList.appendChild(renderTask(docSnap));
+    function startTasksListener(uid) {
+      if (unsubscribeTasksListener) unsubscribeTasksListener();
+      const tasksCollection = collection(db, 'users', uid, 'tasks');
+      unsubscribeTasksListener = onSnapshot(tasksCollection, snapshot => {
+        tasks = [];
+        snapshot.forEach(doc => {
+          tasks.push({ id: doc.id, ...doc.data() });
         });
+        render();
       });
     }
 
-    onAuthStateChanged(auth, (user) => {
+    // Login
+    loginBtn.addEventListener('click', async () => {
+      const email = emailInput.value.trim();
+      const password = passwordInput.value.trim();
+      if (!email || !password) {
+        showError('Email e password sono obbligatorie');
+        return;
+      }
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+        showError('');
+      } catch (err) {
+        showError('Credenziali errate o utente non registrato');
+      }
+    });
+
+    // Auth state listener
+    onAuthStateChanged(auth, user => {
       if (user) {
         currentUser = user;
-        loginScreen.style.display = "none";
-        container.style.display = "flex";
-        loadTasksRealtime();
+        loginScreen.style.display = 'none';
+        container.style.display = 'flex';
+        startTasksListener(user.uid);
       } else {
         currentUser = null;
-        loginScreen.style.display = "flex";
-        container.style.display = "none";
-        if (unsubscribeTasks) unsubscribeTasks();
+        container.style.display = 'none';
+        loginScreen.style.display = 'flex';
+        tasks = [];
+        render();
+      }
+    });
+
+    // Gestione aggiunta task
+    addBtn.addEventListener('click', async () => {
+      const val = taskInput.value.trim();
+      if (!val) return;
+      await addTask(val);
+      taskInput.value = '';
+    });
+    taskInput.addEventListener('keydown', async e => {
+      if (e.key === 'Enter') {
+        addBtn.click();
       }
     });
   </script>
 </head>
 <body>
-  <section id="login-screen">
-    <form class="login-container" id="login-form" autocomplete="off" spellcheck="false">
-      <h2>Accedi</h2>
+  <div id="login-screen">
+    <div class="login-container" role="main" aria-label="Login">
+      <h2>Accedi al tuo account</h2>
       <label for="email">Email</label>
-      <input id="email" type="email" name="email" autocomplete="off" required />
+      <input type="email" id="email" placeholder="tuo@email.com" autocomplete="username" aria-required="true" />
       <label for="password">Password</label>
-      <input id="password" type="password" name="password" autocomplete="off" required />
-      <button type="submit">Accedi</button>
-      <div class="login-error" id="login-error"></div>
-    </form>
-  </section>
-
-  <section class="container">
-    <h1>To-Do List</h1>
-    <div class="new-task">
-      <input id="new-task-input" type="text" placeholder="Aggiungi nuova attività..." />
-      <button id="add-task-btn">Aggiungi</button>
+      <input type="password" id="password" placeholder="••••••••" autocomplete="current-password" aria-required="true" />
+      <button id="login-btn" aria-label="Login">Login</button>
+      <div id="login-error" class="login-error" role="alert" aria-live="polite"></div>
     </div>
-    <ul id="tasks"></ul>
-  </section>
+  </div>
+
+  <div class="container" role="main" aria-label="Lista To-Do">
+    <h1>La tua To-Do List</h1>
+    <div class="new-task">
+      <input type="text" id="task-input" placeholder="Aggiungi nuovo task..." aria-label="Nuovo task" />
+      <button id="add-btn" aria-label="Aggiungi task">Aggiungi</button>
+    </div>
+    <ul id="tasks" aria-live="polite" aria-relevant="additions removals"></ul>
+  </div>
 </body>
 </html>

@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>To-Do List con Login Responsive</title>
+  <style>
+    :root {
+      --colors: #FDE68A, #A7F3D0, #BFDBFE, #FECACA, #D9D7FE;
+      --background: #F3F4F6;
+      --text: #1F2937;
+      --muted: #6B7280;
+      --success: #10B981;
+      --danger: #EF4444;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: var(--background);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 0;
+      margin: 0;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    /* LOGIN STYLES */
+    #login-screen {
+      width: 100vw;
+      height: 100vh;
+      background: var(--background);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 1rem;
+    }
+    .login-container {
+      width: 100%; max-width: 360px;
+      background: #ffffffcc;
+      border-radius: 12px;
+      box-shadow: 0 6px 15px rgba(0,0,0,0.1);
+      padding: 1.5rem 2rem;
+      box-sizing: border-box;
+    }
+    .login-container h2 {
+      text-align: center; margin-bottom: 1rem;
+      color: #1F2937; font-size: 1.5rem;
+    }
+    .login-container label { display: block; font-weight: 600; margin-bottom: .25rem; color: #374151; font-size: .9rem; }
+    .login-container input[type="email"], .login-container input[type="password"] {
+      width: 100%; padding: .7rem .9rem; margin-bottom: 1rem;
+      border: 2px solid #D1D5DB; border-radius: 8px;
+      font-size: 1rem; transition: border-color .3s ease;
+    }
+    .login-container input:focus {
+      outline: none; border-color: #3B82F6;
+      box-shadow: 0 0 6px #3B82F6aa;
+    }
+    .login-container button {
+      width: 100%; padding: .75rem 0;
+      background: #3B82F6; color: #fff;
+      border: none; border-radius: 8px;
+      font-weight: 600; font-size: 1.1rem;
+      cursor: pointer; transition: background .3s ease;
+    }
+    .login-container button:hover { background: #2563EB; }
+    .login-error {
+      margin-top: .5rem; color: #EF4444;
+      font-size: .9rem; text-align: center;
+      min-height: 1.2em;
+    }
+    /* TO-DO LIST CONTAINER */
+    .container {
+      width: 100vw; max-width: 960px;
+      min-height: 100vh; background: #fff;
+      display: flex; flex-direction: column;
+      padding: 1rem 1.5rem 2rem; gap: 1rem;
+      box-sizing: border-box; display: none;
+    }
+    h1 {
+      font-size: clamp(1.75rem,4vw,2.5rem);
+      text-align: center; margin-top: .75rem;
+    }
+    .new-task {
+      display: flex; gap: .5rem;
+      max-width: 500px; width: 90%; margin: 0 auto;
+      align-items: center;
+    }
+    .new-task input {
+      flex: 1; padding: .75rem 1rem;
+      border: 2px solid var(--muted); border-radius: .5rem;
+      font-size: 1.1rem; transition: border-color .3s ease;
+    }
+    .new-task input:focus {
+      outline: none; border-color: #3B82F6;
+      box-shadow: 0 0 8px #3B82F6aa;
+    }
+    .new-task button {
+      padding: .75rem 1rem; background: var(--text);
+      color: #fff; border: none; border-radius: .5rem;
+      font-size: 1.1rem; cursor: pointer; transition: background .2s;
+      flex-shrink: 0;
+    }
+    .new-task button:hover { background: #374151; }
+    ul#tasks {
+      list-style: none; flex: 1;
+      display: grid; gap: 1rem;
+      overflow-y: auto; padding: 0 1rem;
+      grid-template-columns: repeat(auto-fill,minmax(220px,1fr));
+      max-height: calc(100vh - 200px);
+    }
+    .task {
+      background: #fff; border-radius: .75rem;
+      display: flex; flex-direction: column;
+      justify-content: space-between;
+      padding: 1rem; box-shadow: 0 2px 8px rgba(0,0,0,.1);
+      min-height: 100px; transition: opacity .3s ease;
+      word-break: break-word;
+    }
+    .task.completed { opacity: .6; text-decoration: line-through; }
+    .actions { display: flex; justify-content: flex-end; gap: .5rem; }
+    .actions button {
+      background: rgba(0,0,0,.1); border: none;
+      cursor: pointer; font-size: 1.3rem;
+      padding: .2rem .6rem; border-radius: .5rem;
+      transition: background .2s;
+    }
+    .actions button:hover { background: rgba(0,0,0,.2); }
+    .complete-btn { color: var(--success); }
+    .delete-btn { color: var(--danger); }
+    @media(max-width:640px) {
+      .new-task { width:95%; }
+      ul#tasks { padding:0 .5rem; max-height:calc(100vh-180px); }
+    }
+    @media(max-width:400px) {
+      ul#tasks { grid-template-columns:1fr!important; max-height:calc(100vh-160px); }
+    }
+  </style>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-app.js";
+    import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-auth.js";
+    import { getFirestore, collection, doc, setDoc, onSnapshot, deleteDoc } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAOPSQKmSES4Aa4wf7wRCTNepBEpe7PqEw",
+      authDomain: "todo-sync-8d791.firebaseapp.com",
+      projectId: "todo-sync-8d791",
+      storageBucket: "todo-sync-8d791.appspot.com",
+      messagingSenderId: "699733252639",
+      appId: "1:699733252639:web:99276535a646e79b52532a"
+    };
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    const loginScreen = document.getElementById('login-screen');
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const loginBtn = document.getElementById('login-btn');
+    const loginError = document.getElementById('login-error');
+    const container = document.querySelector('.container');
+    const taskInput = document.getElementById('task-input');
+    const addBtn = document.getElementById('add-btn');
+    const tasksUL = document.getElementById('tasks');
+    let currentUser = null;
+    function showError(msg) { loginError.textContent = msg; }
+    function render(tasks) {
+      tasksUL.innerHTML = '';
+      tasks.forEach((t, i) => {
+        const li = document.createElement('li'); li.className = 'task'+(t.done?' completed':'');
+        li.style.backgroundColor = getComputedStyle(document.documentElement)
+          .getPropertyValue('--colors').split(',')[i%5].trim();
+        li.innerHTML = `<div class="title">${t.title}</div><div class="actions">
+          <button class="complete-btn">${t.done?'↩️':'✓'}</button>
+          <button class="delete-btn">🗑️</button></div>`;
+        li.querySelector('.complete-btn').onclick = () => toggleDone(t.id, !t.done);
+        li.querySelector('.delete-btn').onclick = () => deleteTask(t.id);
+        tasksUL.appendChild(li);
+      });
+    }
+    function startListener(uid) {
+      const col = collection(db,'users',uid,'tasks');
+      onSnapshot(col,snap=>{ const arr=[]; snap.forEach(d=>arr.push({id:d.id,...d.data()})); render(arr); });
+    }
+    async function deleteTask(id) {
+      const ref = doc(db,'users',currentUser.uid,'tasks',id);
+      await deleteDoc(ref);
+    }
+    async function toggleDone(id,val) {
+      const ref = doc(db,'users',currentUser.uid,'tasks',id);
+      await setDoc(ref,{done:val},{merge:true});
+    }
+    async function addTask(title) {
+      const ref = doc(collection(db,'users',currentUser.uid,'tasks'));
+      await setDoc(ref,{title,done:false});
+    }
+    addBtn.onclick = () => { if(taskInput.value.trim()) addTask(taskInput.value.trim()); taskInput.value=''; };
+    loginBtn.onclick = async()=>{
+      const e=emailInput.value.trim(),p=passwordInput.value.trim(); if(!e||!p){showError('Email e password obbligatorie');return;} try{
+        const uc = await signInWithEmailAndPassword(auth,e,p);
+        currentUser=uc.user; loginScreen.style.display='none'; container.style.display='flex'; startListener(currentUser.uid);
+      }catch{showError('Credenziali errate');}
+    };
+    onAuthStateChanged(auth,u=>{ if(u){currentUser=u;loginScreen.style.display='none';container.style.display='flex';startListener(u.uid);}else{loginScreen.style.display='flex';container.style.display='none';}});
+  </script>
+</head>
+<body>
+  <div id="login-screen">
+    <div class="login-container">
+      <h2>Accedi al tuo account</h2>
+      <label>Email</label><input id="email" type="email" />
+      <label>Password</label><input id="password" type="password" />
+      <button id="login-btn">Login</button>
+      <div class="login-error" id="login-error"></div>
+    </div>
+  </div>
+  <div class="container">
+    <h1>La tua To-Do List</h1>
+    <div class="new-task">
+      <input id="task-input" type="text" placeholder="Aggiungi nuovo task..." />
+      <button id="add-btn">Aggiungi</button>
+    </div>
+    <ul id="tasks"></ul>
+  </div>
+</body>
+</html>
